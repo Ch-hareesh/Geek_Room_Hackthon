@@ -1,31 +1,30 @@
 #!/bin/sh
 # docker-entrypoint.sh
-# Starts both the FastAPI backend and the Next.js frontend server.
-# Both processes run concurrently; the script waits for either to exit.
-
 set -e
 
 echo "========================================"
 echo "  🏦 AI Financial Research Agent"
 echo "========================================"
 
-# Start FastAPI backend (port 8000)
+# 1. Start FastAPI backend on INTERNAL localhost:8000
+# We use 127.0.0.1 so it is only accessible by Next.js (via proxy)
 echo "▶  Starting FastAPI backend on port 8000..."
 cd /app
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 &
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
 
-# Start Next.js frontend (port 3000)
-echo "▶  Starting Next.js frontend on port 3000..."
+# 2. Start Next.js frontend on the PUBLIC Render PORT
+# Render automatically sets the $PORT environment variable (e.g., 10000)
+CURRENT_PORT=${PORT:-3000}
+echo "▶  Starting Next.js frontend on port $CURRENT_PORT..."
 cd /app/frontend
-npx next start --hostname 0.0.0.0 --port 3000 &
+npx next start --hostname 0.0.0.0 --port $CURRENT_PORT &
 FRONTEND_PID=$!
 
 echo "========================================"
-echo "  ✅  Both services started"
-echo "  API  →  http://localhost:8000"
-echo "  Docs →  http://localhost:8000/docs"
-echo "  UI   →  http://localhost:3000"
+echo "  ✅  Services started"
+echo "  Backend (Internal) → http://127.0.0.1:8000"
+echo "  Frontend (Public)  → http://0.0.0.0:$CURRENT_PORT"
 echo "========================================"
 
 # Wait for either process to exit
