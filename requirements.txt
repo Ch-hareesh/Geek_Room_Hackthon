@@ -1,6 +1,10 @@
 # ============================================================
 # Backend Python dependencies
 # ============================================================
+# NOTE: PyTorch (CPU-only) is installed separately in the Dockerfile
+#       via the dedicated CPU wheel index BEFORE this file is processed.
+#       Do NOT add torch/torchvision/torchaudio here.
+# ============================================================
 
 # --- Web framework ---
 fastapi==0.111.0
@@ -33,8 +37,8 @@ scikit-learn==1.4.2
 xgboost==2.0.3
 
 # --- Deep learning (TFT) ---
-# CPU-only torch — swap the index URL for GPU if needed
-torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
+# torch / torchvision / torchaudio are installed via Dockerfile
+# (CPU-only wheel index) before this file is processed.
 pytorch-forecasting==1.1.1
 pytorch-lightning==2.2.4
 

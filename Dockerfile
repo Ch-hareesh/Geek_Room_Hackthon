@@ -1,67 +1,86 @@
 # ============================================================
-# Dockerfile — AI Financial Research Agent
+# Dockerfile — AI Financial Research Agent (Render-optimised)
+# ============================================================
+# Strategy:
+#   Stage 1 (frontend-builder) → Build Next.js standalone output
+#   Stage 2 (backend)          → Python 3.11-slim + Node.js runtime
+#                                Copies only the tiny standalone bundle
 # ============================================================
 
 # ─────────────────────────────────────────────────────────────
-# Stage 1 — Build the Next.js frontend
+# Stage 1 — Build the Next.js frontend (standalone mode)
 # ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Install dependencies
+# Install deps first (better layer caching)
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-# Copy source and build
+# Copy source and build standalone bundle
 COPY frontend/ ./
-# Point the API rewrite at the internal backend
 ENV NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 RUN npm run build
 
 
 # ─────────────────────────────────────────────────────────────
-# Stage 2 — Python backend + Node.js Runtime
+# Stage 2 — Python backend + minimal Node.js runtime
 # ─────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS backend
 
-# 1. Install System Deps + Node.js + npm
-# We need Node.js/npm in the final image to run 'npx next start'
+# ── 1. System dependencies & Node.js ──────────────────────────
+# We install build-essential only to compile Python C-extensions,
+# then REMOVE it in the same layer to keep the image lean.
+# Node.js is fetched from NodeSource so we avoid the heavy
+# nodejs/npm apt packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     libgomp1 \
     curl \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends \
     nodejs \
-    npm \
+    && apt-get purge -y --auto-remove gnupg \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2. Python dependencies
+# ── 2. Python dependencies ─────────────────────────────────────
 COPY requirements.txt ./
+
+# Install PyTorch CPU-only FIRST (separate layer for better caching
+# and to use the dedicated CPU wheel index).
+RUN pip install --no-cache-dir \
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Install the rest of the requirements
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# 3. Application source code
+# ── 3. Application source code ─────────────────────────────────
 COPY backend/ ./backend/
 COPY .env.example .env.example
-# Copy model files if they exist locally
-COPY backend/forecasting/ ./backend/forecasting/
 
-# 4. Frontend built output
-COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
-# COPY --from=frontend-builder /app/frontend/public ./frontend/public  <-- Keep commented if you don't have this folder
-COPY --from=frontend-builder /app/frontend/node_modules ./frontend/node_modules
-COPY --from=frontend-builder /app/frontend/package.json ./frontend/package.json
+# ── 4. Next.js standalone bundle (tiny — no node_modules!) ─────
+# standalone/ already contains its own server.js + bundled deps
+COPY --from=frontend-builder /app/frontend/.next/standalone ./frontend/
+# Static assets must live at <standalone>/frontend/.next/static
+COPY --from=frontend-builder /app/frontend/.next/static ./frontend/.next/static
+# public/ folder (if it exists) must live at <standalone>/frontend/public
+# Uncomment the next line if you add a public/ folder to the frontend
+# COPY --from=frontend-builder /app/frontend/public ./frontend/public
 
-# 5. Data directory
+# ── 5. Data directory ──────────────────────────────────────────
 RUN mkdir -p /app/data
 
-# 6. Ports (Documentary only, Render controls this via $PORT)
-EXPOSE 8000 3000
-
-# 7. Entrypoint
+# ── 6. Entrypoint ──────────────────────────────────────────────
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Render assigns PORT dynamically; expose both internal ports for docs
+EXPOSE 8000 3000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
