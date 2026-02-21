@@ -48,17 +48,12 @@ financial_agent.db
 # 📊 Machine Learning Models
 # ----------------------------
 # Model weights & checkpoints (large binary files)
-*.pth
-*.pkl
+#*.pth
+#*.pkl
 *.joblib
 *.h5
 *.onnx
 *.bin
-backend/forecasting/tft/*.pth
-backend/forecasting/tft/*.pkl
-backend/forecasting/xgboost/*.pkl
-backend/forecasting/features.pkl
-backend/forecasting/stocks_used.pkl
 
 # ----------------------------
 # 📋 Logs
