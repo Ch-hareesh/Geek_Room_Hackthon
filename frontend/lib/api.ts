@@ -2,7 +2,7 @@
 import { useState, useCallback } from "react";
 import type { AgentResponse, AgentRequest } from "@/lib/types";
 
-const API_BASE = "/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export function useAgentQuery() {
     const [data, setData] = useState<AgentResponse | null>(null);
